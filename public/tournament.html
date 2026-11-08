@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ScrabbleBot — Live Tournament Command Center</title>
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --panel: #131b2a;
+      --panel-alt: #182235;
+      --border: #263552;
+      --text: #e6edf7;
+      --muted: #8ea0be;
+      --accent: #38bdf8;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --purple: #a855f7;
+      --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.5;
+      padding: 24px 32px;
+      max-width: 1540px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .title-group h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .radar-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--emerald);
+      box-shadow: 0 0 12px var(--emerald);
+      animation: pulse 1.6s infinite ease-in-out;
+      display: inline-block;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.95); opacity: 0.7; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.7; }
+    }
+
+    .badge {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+    }
+
+    .badge-emerald {
+      background: rgba(16, 185, 129, 0.16);
+      color: var(--emerald);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .badge-amber {
+      background: rgba(245, 158, 11, 0.16);
+      color: var(--amber);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+
+    .badge-purple {
+      background: rgba(168, 85, 247, 0.16);
+      color: var(--purple);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin-top: 4px;
+    }
+
+    .header-nav {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .nav-btn {
+      background: var(--panel-alt);
+      color: var(--text);
+      text-decoration: none;
+      border: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 0.84rem;
+      padding: 8px 14px;
+      border-radius: 8px;
+      transition: background 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .nav-btn:hover {
+      background: var(--border);
+      color: #fff;
+    }
+
+    .action-btn {
+      background: var(--accent);
+      color: #06101e;
+      border: none;
+      font-weight: 700;
+      font-size: 0.84rem;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.12s ease, opacity 0.12s ease;
+    }
+
+    .action-btn:hover {
+      opacity: 0.92;
+      transform: translateY(-1px);
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .kpi-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      position: relative;
+    }
+
+    .kpi-label {
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .kpi-value {
+      font-family: var(--font-mono);
+      font-size: 2rem;
+      font-weight: 700;
+      margin: 6px 0 4px;
+    }
+
+    .kpi-sub {
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 22px;
+      margin-bottom: 24px;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .panel-header h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .filter-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    input.search-input {
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 12px;
+      border-radius: 7px;
+      font-size: 0.84rem;
+      font-family: var(--font-sans);
+      outline: none;
+      width: 220px;
+    }
+
+    input.search-input:focus {
+      border-color: var(--accent);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(38, 53, 82, 0.65);
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    td.mono {
+      font-family: var(--font-mono);
+    }
+
+    tr.highlight-us {
+      background: rgba(16, 185, 129, 0.14);
+      border-left: 3px solid var(--emerald);
+    }
+
+    tr.highlight-topcut {
+      background: rgba(56, 189, 248, 0.06);
+    }
+
+    .tourney-selector {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .tab-btn {
+      background: var(--panel-alt);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .tab-btn.active {
+      background: var(--accent);
+      color: #06101e;
+      border-color: var(--accent);
+    }
+
+    .matches-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .match-card {
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 14px 16px;
+    }
+
+    .match-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title-group">
+      <h1>
+        <span class="radar-dot"></span>
+        Tournament Command Center
+        <span class="badge" id="header-status-badge">SYNCING...</span>
+      </h1>
+      <div class="subtitle">
+        Live SpacetimeDB Tournament Radar & Swiss Match Tracker for <a href="https://scrabblebot.spacetimedb.com/" target="_blank" style="color: var(--accent)">scrabblebot.spacetimedb.com</a>
+      </div>
+    </div>
+    <div class="header-nav">
+      <span id="last-sync" style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted);">Syncing...</span>
+      <a href="/" class="nav-btn">← Engine Telemetry</a>
+      <button class="action-btn" id="refresh-btn" onclick="fetchTournament()">Refresh Now</button>
+    </div>
+  </header>
+
+  <section class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span>Active Tournament</span>
+        <span id="kpi-tourney-type" class="badge">Vickrey</span>
+      </div>
+      <div class="kpi-value" id="kpi-tourney-id">Tournament #--</div>
+      <div class="kpi-sub" id="kpi-tourney-state">State: Checking SpacetimeDB...</div>
+    </div>
+
+    <div class="kpi-card" style="border-color: rgba(16, 185, 129, 0.5);">
+      <div class="kpi-label">
+        <span>Our Bot Entry</span>
+        <span id="kpi-entry-badge" class="badge badge-emerald">REGISTERED</span>
+      </div>
+      <div class="kpi-value" id="kpi-our-bot" style="color: var(--emerald);">rackpilot-live</div>
+      <div class="kpi-sub" id="kpi-our-sub">Bot #220 | Entry #-- | 0 Swiss Pts</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span>Tournament Format</span>
+        <span class="badge badge-purple" id="kpi-round-badge">Round 0 / 4</span>
+      </div>
+      <div class="kpi-value" id="kpi-swiss-rounds">4 Swiss Rounds</div>
+      <div class="kpi-sub">6-Player Matches | Top 6 Cut to Finals</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span>Entrants Registered</span>
+        <span class="badge badge-amber" id="kpi-entrants-count">-- Bots</span>
+      </div>
+      <div class="kpi-value" id="kpi-entrants-total">--</div>
+      <div class="kpi-sub" id="kpi-entrants-sub">Field loaded from SpacetimeDB</div>
+    </div>
+  </section>
+
+  <div id="register-banner" style="display: none; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 10px; padding: 14px 18px; margin-bottom: 24px; align-items: center; justify-content: space-between;">
+    <div>
+      <strong style="color: var(--amber);">Notice:</strong> Our bot is not yet entered in the currently active tournament!
+    </div>
+    <button class="action-btn" id="auto-reg-btn" onclick="registerOurBot()">Click to Register Bot Now</button>
+  </div>
+
+  <section class="panel">
+    <div class="panel-header">
+      <h2>
+        Tournament Standings & Entrants Roster
+        <span class="badge badge-emerald" id="roster-count-badge">-- Entrants</span>
+      </h2>
+      <div class="filter-group">
+        <input type="text" id="bot-search" class="search-input" placeholder="Search bot name or ID..." oninput="filterTable()" />
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th># Rank</th>
+          <th>Bot Name & ID</th>
+          <th>Swiss Points</th>
+          <th>Total Score</th>
+          <th>Finish Position</th>
+          <th>Skill Rating</th>
+          <th>Career Record</th>
+          <th>Win Rate</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="standings-tbody">
+        <tr>
+          <td colspan="9" style="text-align: center; color: var(--muted); padding: 24px;">Loading tournament data...</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <h2>
+        Recent Tournament Matches & Rounds
+        <span class="badge badge-purple" id="matches-count-badge">-- Matches</span>
+      </h2>
+    </div>
+    <div class="matches-grid" id="matches-grid">
+      <div style="color: var(--muted); font-size: 0.88rem;">No tournament matches have begun yet. Stand by for Swiss Round 1!</div>
+    </div>
+  </section>
+
+  <script>
+    let currentTournamentData = null;
+
+    async function fetchTournament() {
+      try {
+        const res = await fetch("/api/tournament");
+        const data = await res.json();
+        if (data.ok && data.tournament) {
+          currentTournamentData = data.tournament;
+          renderTournament(data.tournament);
+        }
+      } catch (err) {
+        console.error("fetchTournament error:", err);
+      }
+    }
+
+    function renderTournament(t) {
+      document.getElementById("last-sync").textContent = "Synced " + new Date().toLocaleTimeString();
+
+      const stBadge = document.getElementById("header-status-badge");
+      stBadge.textContent = t.status.toUpperCase();
+      if (t.status === "Registration") {
+        stBadge.className = "badge badge-amber";
+      } else if (t.status === "Swiss" || t.status === "Bracket" || t.status === "Final") {
+        stBadge.className = "badge badge-emerald";
+      } else {
+        stBadge.className = "badge";
+      }
+
+      document.getElementById("kpi-tourney-id").textContent = `Tournament #${t.id}`;
+      document.getElementById("kpi-tourney-type").textContent = t.auctionType;
+      document.getElementById("kpi-tourney-state").textContent =
+        `State: ${t.status} | Round ${t.currentRound} / ${t.swissRoundsTotal}`;
+
+      document.getElementById("kpi-swiss-rounds").textContent = `${t.swissRoundsTotal} Swiss Rounds`;
+      document.getElementById("kpi-round-badge").textContent = `Round ${t.currentRound} / ${t.swissRoundsTotal}`;
+
+      document.getElementById("kpi-entrants-total").textContent = t.entriesCount;
+      document.getElementById("kpi-entrants-count").textContent = `${t.entriesCount} Bots`;
+      document.getElementById("roster-count-badge").textContent = `${t.entriesCount} Entrants`;
+
+      // Our Bot Entry Card
+      const regBanner = document.getElementById("register-banner");
+      if (t.ourEntry) {
+        regBanner.style.display = "none";
+        document.getElementById("kpi-entry-badge").textContent = "REGISTERED";
+        document.getElementById("kpi-entry-badge").className = "badge badge-emerald";
+        document.getElementById("kpi-our-sub").textContent =
+          `Bot #220 | Entry #${t.ourEntry.entryId} | ${t.ourEntry.swissPoints} Swiss Pts | Rating ${t.ourEntry.rating}`;
+      } else {
+        regBanner.style.display = t.status === "Registration" ? "flex" : "none";
+        document.getElementById("kpi-entry-badge").textContent = "NOT ENTERED";
+        document.getElementById("kpi-entry-badge").className = "badge badge-amber";
+        document.getElementById("kpi-our-sub").textContent = `Bot #220 | Not registered for Tournament #${t.id}`;
+      }
+
+      renderStandingsTable(t.standings, t.topCut);
+      renderMatches(t.recentMatches);
+    }
+
+    function renderStandingsTable(standings, topCut) {
+      const q = document.getElementById("bot-search").value.toLowerCase().trim();
+      const filtered = standings.filter((s) => {
+        if (!q) return true;
+        return s.botName.toLowerCase().includes(q) || String(s.botId).includes(q);
+      });
+
+      const tbody = document.getElementById("standings-tbody");
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--muted); padding: 20px;">No matching bots found.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered
+        .map((s, idx) => {
+          const isTopCut = idx < (topCut ?? 6);
+          const rowClass = s.isUs ? "highlight-us" : isTopCut ? "highlight-topcut" : "";
+          const finishText = s.finishPosition !== null ? `#${s.finishPosition}` : "--";
+          return `
+            <tr class="${rowClass}">
+              <td class="mono" style="font-weight: 700; color: ${s.isUs ? "var(--emerald)" : "var(--text)"};">
+                #${idx + 1}
+              </td>
+              <td>
+                <strong>${s.botName}</strong>
+                <span style="color: var(--muted); font-size: 0.74rem;">#${s.botId}</span>
+                ${s.isUs ? '<span class="badge badge-emerald" style="margin-left: 6px; font-size: 0.68rem;">US</span>' : ""}
+                ${s.isSimulated ? '<span class="badge" style="margin-left: 4px; font-size: 0.65rem;">SIM</span>' : ""}
+              </td>
+              <td class="mono" style="font-weight: 700; color: var(--accent); font-size: 0.95rem;">
+                ${s.swissPoints}
+              </td>
+              <td class="mono">${s.totalScore.toLocaleString()}</td>
+              <td class="mono">${finishText}</td>
+              <td class="mono">${s.rating}</td>
+              <td class="mono">${s.wins} / ${s.matchesPlayed}</td>
+              <td class="mono">${(s.winRate * 100).toFixed(1)}%</td>
+              <td>
+                ${s.eliminated ? '<span class="badge" style="color: var(--rose); border-color: rgba(244,63,94,0.4);">ELIMINATED</span>' : '<span class="badge badge-emerald">ACTIVE</span>'}
+              </td>
+            </tr>
+          `;
+        })
+        .join("");
+    }
+
+    function renderMatches(matches) {
+      const container = document.getElementById("matches-grid");
+      document.getElementById("matches-count-badge").textContent = `${matches.length} Matches`;
+      if (matches.length === 0) {
+        container.innerHTML = `<div style="color: var(--muted); font-size: 0.88rem; padding: 12px;">No tournament matches have begun yet. Stand by for Swiss Round 1!</div>`;
+        return;
+      }
+
+      container.innerHTML = matches
+        .map(
+          (m) => `
+          <div class="match-card">
+            <div class="match-head">
+              <span>Match #${m.matchId}</span>
+              <span class="badge badge-purple">${m.phase}</span>
+            </div>
+            <div style="font-weight: 600; font-size: 0.9rem; margin-top: 4px;">
+              Round ${m.round}
+            </div>
+            <div style="color: var(--muted); font-size: 0.8rem; margin-top: 4px;">
+              6-Player Tournament Bracket Match
+            </div>
+          </div>
+        `
+        )
+        .join("");
+    }
+
+    function filterTable() {
+      if (currentTournamentData) {
+        renderStandingsTable(currentTournamentData.standings, currentTournamentData.topCut);
+      }
+    }
+
+    async function registerOurBot() {
+      const btn = document.getElementById("auto-reg-btn");
+      if (!currentTournamentData) return;
+      btn.disabled = true;
+      btn.textContent = "Registering...";
+      try {
+        const res = await fetch("/api/register-tournament", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tournamentId: currentTournamentData.id }),
+        });
+        const d = await res.json();
+        alert(d.message);
+        await fetchTournament();
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Click to Register Bot Now";
+      }
+    }
+
+    fetchTournament();
+    setInterval(fetchTournament, 3500);
+  </script>
+</body>
+</html>

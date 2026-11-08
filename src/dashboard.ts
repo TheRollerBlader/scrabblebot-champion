@@ -11,6 +11,13 @@ const PUBLIC_DIR = path.resolve(ROOT_DIR, "public");
 const BENCHMARK_FILE = path.resolve(ROOT_DIR, "data", "benchmark-report.json");
 const TELEMETRY_FILE = path.resolve(ROOT_DIR, "data", "live-telemetry.json");
 const SPACETIME_SQL_URL = "https://maincloud.spacetimedb.com/v1/database/scrabblebot/sql";
+const SPACETIME_CALL_URL = "https://maincloud.spacetimedb.com/v1/database/scrabblebot/call";
+
+const BOT_TOKEN =
+  process.env.BOT_TOKEN ??
+  "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJoZXhfaWRlbnRpdHkiOiJjMjAwZjlmYmMzZWIyNTFiZjhmMTRhMTIzMzI0MTZkMjg5OTI3MmMzMjkzZGQ0ZjEzM2U5ZTUwOTkzYWIwZWNhIiwic3ViIjoiMjFjYjAyZjUtY2U4Ni00MDkxLTkzNmMtMGI4ZDEyMWY0ZTdkIiwiaXNzIjoibG9jYWxob3N0IiwiYXVkIjpbInNwYWNldGltZWRiIl0sImlhdCI6MTc5NDA5NzQ5N30.GWComnDbwhNzb1585G4iwYQNT3TSv9WiJS4j5gg62vYU-sDXHOjxkN8FkFhsQer60RC6ky_t9CWsZq6iomqrXg";
+const MY_BOT_ID = Number(process.env.TRACKED_BOT_ID ?? 220);
+const MY_BOT_NAME = process.env.BOT_NAME ?? "rackpilot-live";
 
 interface LiveLeaderboardRow {
   botId: number;
@@ -30,6 +37,60 @@ interface LiveWordRow {
   totalReward: number;
 }
 
+export interface TournamentEntryData {
+  entryId: number;
+  tournamentId: number;
+  botId: number;
+  botName: string;
+  swissPoints: number;
+  totalScore: number;
+  eliminated: boolean;
+  finishPosition: number | null;
+  rating: number;
+  matchesPlayed: number;
+  wins: number;
+  winRate: number;
+  isUs: boolean;
+  isSimulated: boolean;
+}
+
+export interface TournamentData {
+  id: number;
+  status: "Lobby" | "Swiss" | "Bracket" | "Final" | "Ended" | "Registration" | "ForceEnded" | "Unknown";
+  statusRaw: number;
+  swissRoundsTotal: number;
+  currentRound: number;
+  topCut: number;
+  matchSize: number;
+  auctionType: "Vickrey" | "FirstPrice";
+  createdAt: string;
+  endedAt: string | null;
+  winnerBotId: number | null;
+  winnerName: string | null;
+  entriesCount: number;
+  ourEntry: TournamentEntryData | null;
+  standings: TournamentEntryData[];
+  matchesCount: number;
+  recentMatches: {
+    matchId: number;
+    round: number;
+    phase: string;
+  }[];
+  allTournaments: {
+    id: number;
+    status: string;
+    swissRoundsTotal: number;
+    currentRound: number;
+    winnerBotId: number | null;
+  }[];
+}
+
+let cachedTournamentData: { fetchedAt: string; data: TournamentData | null } = {
+  fetchedAt: new Date(0).toISOString(),
+  data: null,
+};
+let lastTournamentFetch = 0;
+
 let cachedLiveFeed: {
   fetchedAt: string;
   leaderboard: LiveLeaderboardRow[];
@@ -41,18 +102,208 @@ let cachedLiveFeed: {
   recentWords: [],
   trackedBot: null,
 };
-
 let lastFetchTime = 0;
 
 async function querySpacetimeSql(sql: string): Promise<any[]> {
-  const res = await fetch(SPACETIME_SQL_URL, {
-    method: "POST",
-    body: sql,
-    signal: AbortSignal.timeout(4500),
-  });
-  if (!res.ok) return [];
-  const data = (await res.json()) as any[];
-  return data;
+  try {
+    const res = await fetch(SPACETIME_SQL_URL, {
+      method: "POST",
+      body: sql,
+      signal: AbortSignal.timeout(4500),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as any[];
+    return data;
+  } catch {
+    return [];
+  }
+}
+
+const TOURNAMENT_STATUSES = [
+  "Lobby",
+  "Swiss",
+  "Bracket",
+  "Final",
+  "Ended",
+  "Registration",
+  "ForceEnded",
+] as const;
+
+export async function fetchTournamentInfo(): Promise<TournamentData | null> {
+  const now = Date.now();
+  if (now - lastTournamentFetch < 3000 && cachedTournamentData.data) {
+    return cachedTournamentData.data;
+  }
+  lastTournamentFetch = now;
+
+  try {
+    const [tData, bData, bsData] = await Promise.all([
+      querySpacetimeSql("SELECT * FROM tournament"),
+      querySpacetimeSql("SELECT id, name, is_simulated FROM bot"),
+      querySpacetimeSql("SELECT bot_id, rating, matches_played, wins, total_score FROM bot_stats"),
+    ]);
+
+    const tRows: any[] = tData?.[0]?.rows ?? [];
+    if (tRows.length === 0) return null;
+
+    // Map bots
+    const botMap = new Map<number, { name: string; isSimulated: boolean }>();
+    for (const b of bData?.[0]?.rows ?? []) {
+      botMap.set(Number(b[0]), { name: String(b[1]), isSimulated: Boolean(b[2]) });
+    }
+
+    // Map stats
+    const statsMap = new Map<number, { rating: number; matchesPlayed: number; wins: number }>();
+    for (const s of bsData?.[0]?.rows ?? []) {
+      statsMap.set(Number(s[0]), {
+        rating: Number(s[1]),
+        matchesPlayed: Number(s[2]),
+        wins: Number(s[3]),
+      });
+    }
+
+    const allTournaments = tRows.map((r) => {
+      const sCode = Number(r[1]?.[0] ?? 0);
+      const status = TOURNAMENT_STATUSES[sCode] ?? "Unknown";
+      const winId = r[9]?.[0] === 0 ? Number(r[9]?.[1]) : null;
+      return {
+        id: Number(r[0]),
+        status,
+        swissRoundsTotal: Number(r[2]),
+        currentRound: Number(r[3]),
+        winnerBotId: winId,
+      };
+    });
+
+    // Select active tournament if exists, otherwise latest
+    let targetRow = tRows.find((r) => {
+      const sCode = Number(r[1]?.[0] ?? 0);
+      const st = TOURNAMENT_STATUSES[sCode];
+      return st !== "Ended" && st !== "ForceEnded";
+    });
+    if (!targetRow) {
+      targetRow = tRows[tRows.length - 1]!;
+    }
+
+    const tId = Number(targetRow[0]);
+    const statusCode = Number(targetRow[1]?.[0] ?? 0);
+    const status = TOURNAMENT_STATUSES[statusCode] ?? "Unknown";
+    const swissRoundsTotal = Number(targetRow[2]);
+    const currentRound = Number(targetRow[3]);
+    const topCut = Number(targetRow[4]);
+    const matchSize = Number(targetRow[5]);
+    const auctionType = targetRow[6]?.[0] === 0 ? "FirstPrice" : "Vickrey";
+    const winnerBotId = targetRow[9]?.[0] === 0 ? Number(targetRow[9]?.[1]) : null;
+    const winnerName = winnerBotId ? botMap.get(winnerBotId)?.name ?? `Bot#${winnerBotId}` : null;
+
+    // Fetch entries and matches for target tournament
+    const [eData, mData] = await Promise.all([
+      querySpacetimeSql(`SELECT * FROM tournament_entry WHERE tournament_id = ${tId}`),
+      querySpacetimeSql(`SELECT * FROM tournament_match WHERE tournament_id = ${tId}`),
+    ]);
+
+    const entryRows: any[] = eData?.[0]?.rows ?? [];
+    const matchRows: any[] = mData?.[0]?.rows ?? [];
+
+    const standings: TournamentEntryData[] = entryRows.map((e) => {
+      const eId = Number(e[0]);
+      const botId = Number(e[2]);
+      const swissPts = Number(e[3]);
+      const elim = Boolean(e[4]);
+      const totScore = Number(e[5]);
+      const finishPos = e[6]?.[0] === 0 ? Number(e[6]?.[1]) : null;
+      const bInfo = botMap.get(botId);
+      const sInfo = statsMap.get(botId);
+      const mp = sInfo?.matchesPlayed ?? 0;
+      const w = sInfo?.wins ?? 0;
+      return {
+        entryId: eId,
+        tournamentId: tId,
+        botId,
+        botName: bInfo?.name ?? `Bot#${botId}`,
+        swissPoints: swissPts,
+        totalScore: totScore,
+        eliminated: elim,
+        finishPosition: finishPos,
+        rating: sInfo?.rating ?? 1000,
+        matchesPlayed: mp,
+        wins: w,
+        winRate: mp > 0 ? +(w / mp).toFixed(3) : 0,
+        isUs: botId === MY_BOT_ID,
+        isSimulated: bInfo?.isSimulated ?? false,
+      };
+    });
+
+    standings.sort((a, b) => {
+      if (a.finishPosition !== null && b.finishPosition !== null) {
+        return a.finishPosition - b.finishPosition;
+      }
+      if (a.finishPosition !== null) return -1;
+      if (b.finishPosition !== null) return 1;
+      return b.swissPoints - a.swissPoints || b.totalScore - a.totalScore;
+    });
+
+    const ourEntry = standings.find((s) => s.botId === MY_BOT_ID) ?? null;
+
+    const recentMatches = matchRows.slice(-12).reverse().map((m) => {
+      const phCode = Number(m[4]?.[0] ?? 0);
+      const phase = phCode === 0 ? "Swiss" : phCode === 1 ? "Bracket" : "Final";
+      return {
+        matchId: Number(m[2]),
+        round: Number(m[3]),
+        phase,
+      };
+    });
+
+    const out: TournamentData = {
+      id: tId,
+      status,
+      statusRaw: statusCode,
+      swissRoundsTotal,
+      currentRound,
+      topCut,
+      matchSize,
+      auctionType,
+      createdAt: new Date().toISOString(),
+      endedAt: targetRow[8]?.[0] === 0 ? new Date().toISOString() : null,
+      winnerBotId,
+      winnerName,
+      entriesCount: standings.length,
+      ourEntry,
+      standings,
+      matchesCount: matchRows.length,
+      recentMatches,
+      allTournaments,
+    };
+
+    cachedTournamentData = { fetchedAt: new Date().toISOString(), data: out };
+    return out;
+  } catch (err) {
+    console.error("fetchTournamentInfo error:", err);
+    return cachedTournamentData.data;
+  }
+}
+
+async function registerBotForTournament(tournamentId: number): Promise<{ ok: boolean; message: string }> {
+  try {
+    const res = await fetch(`${SPACETIME_CALL_URL}/register_for_tournament`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${BOT_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify([tournamentId]),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      lastTournamentFetch = 0; // Invalidate cache
+      return { ok: true, message: `Successfully registered for tournament ${tournamentId}!` };
+    }
+    const txt = await res.text();
+    return { ok: false, message: `Registration response ${res.status}: ${txt}` };
+  } catch (err) {
+    return { ok: false, message: `Error registering: ${(err as Error).message}` };
+  }
 }
 
 async function refreshLiveCompetitionFeed() {
@@ -63,11 +314,13 @@ async function refreshLiveCompetitionFeed() {
   lastFetchTime = now;
 
   try {
-    const payload = await querySpacetimeSql(
-      "SELECT * FROM bot; SELECT * FROM word_play"
-    );
-    const botRows: any[] = payload?.[0]?.rows ?? [];
-    const wordRows: any[] = payload?.[1]?.rows ?? [];
+    const [botRes, wpRes] = await Promise.all([
+      querySpacetimeSql("SELECT * FROM bot"),
+      querySpacetimeSql("SELECT * FROM word_play"),
+    ]);
+
+    const botRows: any[] = botRes?.[0]?.rows ?? [];
+    const wordRows: any[] = wpRes?.[0]?.rows ?? [];
 
     const bots: LiveLeaderboardRow[] = botRows
       .map((r) => {
@@ -94,8 +347,7 @@ async function refreshLiveCompetitionFeed() {
       .filter((b) => b.gamesPlayed >= 8)
       .sort((a, b) => b.winRate - a.winRate || b.wins - a.wins);
 
-    const trackedId = Number(process.env.TRACKED_BOT_ID ?? 220);
-    const trackedRaw = botRows.find((r) => Number(r[0]) === trackedId);
+    const trackedRaw = botRows.find((r) => Number(r[0]) === MY_BOT_ID);
     const trackedBot: LiveLeaderboardRow | null = trackedRaw
       ? {
           botId: Number(trackedRaw[0]),
@@ -221,6 +473,12 @@ const MILESTONES = [
 
 const CHANGELOG = [
   {
+    time: "Update #5 — Dedicated Tournament Command Center & Auto-Register",
+    tag: "TOURNAMENT",
+    detail:
+      "Launched live Tournament Command Center at /tournament with real-time Swiss standings, bracket view, one-click registration, and SpacetimeDB tournament sync.",
+  },
+  {
     time: "Update #4 — Live Dashboard & SpacetimeDB Client Ready (100%)",
     tag: "DEPLOYMENT",
     detail:
@@ -253,6 +511,7 @@ const server = http.createServer(async (req, res) => {
     const benchmark = loadBenchmarkReport();
     const liveFeed = await refreshLiveCompetitionFeed();
     const localTelemetry = loadLocalTelemetry();
+    const tournament = await fetchTournamentInfo();
 
     res.writeHead(200, {
       "Content-Type": "application/json",
@@ -267,8 +526,37 @@ const server = http.createServer(async (req, res) => {
         benchmark,
         liveFeed,
         localTelemetry,
+        tournament,
       })
     );
+    return;
+  }
+
+  if (url.pathname === "/api/tournament" && req.method === "GET") {
+    const tournament = await fetchTournamentInfo();
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    });
+    res.end(JSON.stringify({ ok: true, tournament, myBotId: MY_BOT_ID, myBotName: MY_BOT_NAME }));
+    return;
+  }
+
+  if (url.pathname === "/api/register-tournament" && req.method === "POST") {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", async () => {
+      try {
+        const payload = body ? JSON.parse(body) : {};
+        const tId = Number(payload.tournamentId ?? 2);
+        const result = await registerBotForTournament(tId);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, message: (err as Error).message }));
+      }
+    });
     return;
   }
 
@@ -279,7 +567,17 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Serve public/dashboard.html
+  // Route: /tournament
+  if (url.pathname === "/tournament") {
+    const htmlPath = path.resolve(PUBLIC_DIR, "tournament.html");
+    if (fs.existsSync(htmlPath)) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(fs.readFileSync(htmlPath, "utf-8"));
+      return;
+    }
+  }
+
+  // Route: / or /dashboard
   const htmlPath = path.resolve(PUBLIC_DIR, "dashboard.html");
   if (fs.existsSync(htmlPath)) {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
@@ -292,5 +590,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[Dashboard] Live ScrabbleBot Progress & Telemetry Dashboard running at http://localhost:${PORT}`);
+  console.log(`[Dashboard] Live ScrabbleBot Progress & Tournament Dashboard running at http://localhost:${PORT}`);
+  console.log(`[Dashboard] Tournament Command Center live at http://localhost:${PORT}/tournament`);
 });
