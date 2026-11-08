@@ -1,0 +1,25 @@
+{
+  "name": "scrabblebot-champion",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ScrabbleBot Master Strategy & Architecture Dossier Implementation + Live Dashboard",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "bot": "tsx src/index.ts",
+    "dashboard": "tsx src/dashboard.ts",
+    "benchmark": "tsx src/benchmark.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "spacetimedb": "^2.12.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  }
+}

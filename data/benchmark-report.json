@@ -1,0 +1,96 @@
+{
+  "timestamp": "2026-11-08T04:31:40.300Z",
+  "checklist": {
+    "wordlistPreloading": {
+      "passed": true,
+      "wordCount": 172820,
+      "anagramCount": 156473,
+      "loadTimeMs": 348.37
+    },
+    "processManagement": {
+      "passed": true,
+      "pm2ConfigPath": "/Users/krish/Downloads/Scrabble Bot/ecosystem.config.cjs"
+    },
+    "latencyBenchmark": {
+      "passed": true,
+      "avgFindPlayableMs": 0.143,
+      "p99FindPlayableMs": 0.346,
+      "avgDecideBidMs": 1.521,
+      "thresholdMs": 25
+    },
+    "liquiditySafeguards": {
+      "passed": true,
+      "details": "Confirmed MIN_RESERVE=12 coins enforced across all early/midgame states (bag > 6)"
+    }
+  },
+  "simulation": {
+    "matches": 60,
+    "winRate": 0.75,
+    "wins": 45,
+    "avgScore": 132.1,
+    "avgRank": 1.25,
+    "normalizedPlacement": 0.95,
+    "byArchetype": [
+      {
+        "name": "ScrabbleBot-Champion (Us)",
+        "archetype": "ChampionDossier",
+        "wins": 45,
+        "winRate": 0.75,
+        "avgScore": 132.1,
+        "avgRank": 1.25,
+        "avgTilesWon": 34.8,
+        "avgSpent": 197.6
+      },
+      {
+        "name": "MarketBingo-Alpha",
+        "archetype": "MarketBingoBot",
+        "wins": 15,
+        "winRate": 0.25,
+        "avgScore": 98.5,
+        "avgRank": 1.77,
+        "avgTilesWon": 21,
+        "avgSpent": 186.9
+      },
+      {
+        "name": "Dossier-Baseline",
+        "archetype": "NaiveDossier",
+        "wins": 0,
+        "winRate": 0,
+        "avgScore": 21,
+        "avgRank": 3.87,
+        "avgTilesWon": 1.4,
+        "avgSpent": 8.2
+      },
+      {
+        "name": "Starter-Greedy",
+        "archetype": "StarterBot",
+        "wins": 0,
+        "winRate": 0,
+        "avgScore": 12.6,
+        "avgRank": 4.75,
+        "avgTilesWon": 2.1,
+        "avgSpent": 11.9
+      },
+      {
+        "name": "Brutus-sim (Aggressive)",
+        "archetype": "AggressiveSim",
+        "wins": 0,
+        "winRate": 0,
+        "avgScore": 30.1,
+        "avgRank": 3.37,
+        "avgTilesWon": 8.5,
+        "avgSpent": 40.8
+      },
+      {
+        "name": "Valor-sim (ValueBidder)",
+        "archetype": "ValueBidderSim",
+        "wins": 0,
+        "winRate": 0,
+        "avgScore": 2,
+        "avgRank": 5.82,
+        "avgTilesWon": 0.2,
+        "avgSpent": 2
+      }
+    ]
+  }
+}
